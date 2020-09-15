@@ -1,0 +1,26 @@
+apiVersion: triggers.tekton.dev/v1alpha1
+kind: TriggerBinding
+metadata:
+  name: __TRIGGER_TEMPLATE_NAME__
+spec:
+  params:
+  - name: gitrepositoryurl
+    value: __GIT_SOURCE_CODE_URL__
+  - name: gitrevision
+    value: __GIT_SOURCE_CODE_RIVISION__
+  - name: APPNAME
+    value: __APP_NAME__
+  - name: docker-image-push
+    value: __PUSH_IMAGE_REPO_URL__/__APP_NAME__:__VERSION__
+  - name: docker-image-pull
+    value: __PULL_IMAGE_REPO_URL__/__APP_NAME__:__VERSION__
+  - name: config-git-url
+    value: __CONFIG_REPO_URL__
+  - name: config-git-revision
+    value: __CONFIG_REPO_RIVISION__
+  - name: SONAR_HOST_URL
+    value: __SONAR_HOST_URL__
+  - name: cluster-resource-name
+    value: __CLUSTER_RESOURCE_NAME__
+  - name: SERVICE_ACCOUNT
+    value: __DOCKER_HUB_SERVICE_ACCOUNT__

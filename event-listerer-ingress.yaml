@@ -1,0 +1,13 @@
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: el-jenkinsdemo-listener-ingress
+spec:
+  rules:
+  - host: aeedf07598195413d9c34399d916f4b5-4d65f461b23bc03b.elb.ap-south-1.amazonaws.com
+    http:
+      paths:
+      - backend:
+          serviceName: el-jenkinsdemo-listener
+          servicePort: 8080
+        path: /el-jenkinsdemo-listener

@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: __GIT_CONIG_URL_CREDENCIALS__
+type: Opaque
+data:
+  username: __GIT_CONFIG_USERNAME__
+  password: __GIT_CONFIG_PASSWORD__
+  email: __GIT_CONFIG_EMAIL__

@@ -1,0 +1,47 @@
+apiVersion: tekton.dev/v1beta1
+kind: PipelineRun
+metadata:
+  name: mvn-build-run-__APP_NAME__-__VERSION__
+spec:
+  serviceAccountName: __DOCKER_HUB_SERVICE_ACCOUNT__
+  pipelineRef:
+    name: __PIPELINE_NAME__
+  params:
+    - name: pathToContext
+      value: /workspace/docker-source
+    - name: pathToDockerFile
+      value: Dockerfile
+    - name: git-url
+      value: __CONFIG_REPO_URL__
+    - name: git-revision
+      value: __CONFIG_REPO_RIVISION__
+    - name: appname
+      value: __APP_NAME__
+    - name: namespace
+      value: default
+    - name: SONAR_HOST_URL
+      value: __SONAR_HOST_URL__
+    - name: imageurl
+      value: __PULL_IMAGE_REPO_URL__/__APP_NAME__:__VERSION__
+  resources:
+    - name: docker-source
+      resourceSpec:
+        type: git
+        params:
+          - name: revision
+            value: __GIT_SOURCE_CODE_RIVISION__
+          - name: url
+            value: __GIT_SOURCE_CODE_URL__
+    - name: builtImage
+      resourceSpec:
+        type: image
+        params:
+          - name: url
+            value: __PUSH_IMAGE_REPO_URL__/__APP_NAME__:__VERSION__
+    - name: autoloader-cluster
+      resourceRef:
+        name: __CLUSTER_RESOURCE_NAME__
+  workspaces:
+  - name: local-maven-repo
+    persistentVolumeClaim:
+      claimName: maven-repo-pvc

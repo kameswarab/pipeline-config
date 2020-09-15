@@ -1,0 +1,16 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: __APPLICATION_NAME__
+  namespace: argocd
+spec:
+  syncPolicy:
+    automated: {}
+  project: default
+  source:
+    repoURL: __CONFIG_REPO_URL__
+    targetRevision: __TRAGET_RIVISION__
+    path: .
+  destination:
+    server: __CLUSTER_URL__
+    namespace: __NAMESPACE__

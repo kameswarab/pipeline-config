@@ -1,0 +1,128 @@
+apiVersion: tekton.dev/v1alpha1
+kind: Pipeline
+metadata:
+  name: cicd-pipeline-with-argocd-withsonar-__APP_NAME__
+spec:
+  workspaces:
+  - name: local-maven-repo
+  params:
+  - name: git-url
+  - name: git-revision
+  - name: imageurl
+  - name: pathToContext
+  - name: appname
+  - name: namespace
+  - name: SONAR_HOST_URL
+  - name: GIT_CONIG_URL_CREDENCIALS_SECRET
+  resources:
+  - name: builtImage
+    type: image
+  - name: docker-source
+    type: git
+  - name: autoloader-cluster
+    type: cluster
+  tasks:
+  - name: build
+    taskRef:
+      name: mvn-task
+      kind: ClusterTask
+    resources:
+      inputs:
+      - name: docker-source
+        resource: docker-source
+    params:
+    - name: GOALS
+      value: ["package"]
+    workspaces:
+    - name: maven-repo
+      workspace: local-maven-repo
+  - name: int-test
+    taskRef:
+      name: mvn-task
+      kind: ClusterTask
+    runAfter: ["build"]
+    resources:
+      inputs:
+      - name: docker-source
+        resource: docker-source
+    params:
+    - name: GOALS
+      value: ["verify"]
+    workspaces:
+    - name: maven-repo
+      workspace: local-maven-repo
+  - name: sonarqube-scanner
+    taskRef:
+      name: sonarqube-scanner
+      kind: ClusterTask
+    runAfter: ["int-test"]
+    resources:
+      inputs:
+      - name: docker-source
+        resource: docker-source
+    params:
+    - name: SONAR_HOST_URL
+      value: $(params.SONAR_HOST_URL)
+    - name: SONAR_PROJECT_KEY
+      value: $(params.appname)
+    - name: pathToContext
+      value: $(params.pathToContext)
+    workspaces:
+    - name: maven-repo
+      workspace: local-maven-repo
+  - name: create-image-push
+    taskRef:
+      name: build-docker-image-from-git-source
+      kind: ClusterTask
+    resources:
+      inputs:
+      - name: docker-source
+        resource: docker-source
+      outputs:
+      - name: builtImage
+        resource: builtImage
+    runAfter: ["sonarqube-scanner"]
+    workspaces:
+    - name: maven-repo
+      workspace: local-maven-repo
+  #- name: code-push-task
+  #  taskRef:
+  #    name: code-push
+  #    kind: ClusterTask
+  #  resources:
+  #    inputs:
+  #    - name: docker-source
+  #      resource: docker-source
+  #  params:
+  #  - name: git-url
+  #    value: $(params.git-url)
+  #  - name: git-revision
+  #    value: $(params.git-revision)
+  #  - name: imageurl
+  #    value: $(params.imageurl)
+  #  - name: pathToContext
+  #    value: $(params.pathToContext)
+  #  - name: appname
+  #    value: $(params.appname)
+  #  - name: namespace
+  #    value: $(params.namespace)
+  #  - name: GIT_CONIG_URL_CREDENCIALS
+  #    value: $(params.GIT_CONIG_URL_CREDENCIALS_SECRET)
+  #  runAfter: ["create-image-push"]
+  #  workspaces:
+  #  - name: maven-repo
+  #    workspace: local-maven-repo
+  - name: deploy-image
+    taskRef:
+      name: deploy-image-from-source
+      kind: ClusterTask
+    resources:
+      inputs:
+      - name: docker-source
+        resource: docker-source  
+      - name: autoloader-cluster
+        resource: autoloader-cluster
+    runAfter: ["create-image-push"]
+    workspaces:
+    - name: maven-repo
+      workspace: local-maven-repo      

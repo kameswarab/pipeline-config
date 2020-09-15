@@ -1,0 +1,317 @@
+apiVersion: tekton.dev/v1beta1
+kind: ClusterTask
+metadata:
+  name: mvn-task
+spec:
+  workspaces:
+  - name: maven-repo
+  params:
+    - name: GOALS
+      description: The Maven goals to run
+      type: array
+      default: ["package"]
+  resources:
+    inputs:
+        - name: docker-source
+          type: git
+  steps:
+    - name: mvn
+      image: gcr.io/cloud-builders/mvn
+      workingDir: /workspace/docker-source
+      command: ["/usr/bin/mvn"]
+      args:
+        - -Dmaven.repo.local=$(workspaces.maven-repo.path)
+        - "$(params.GOALS)"
+
+---
+apiVersion: tekton.dev/v1beta1
+kind: ClusterTask
+metadata:
+  name: build-docker-image-from-git-source
+  labels:
+    app.kubernetes.io/version: "0.1"
+  annotations:
+    tekton.dev/pipelines.minVersion: "0.12.1"
+    tekton.dev/tags: github
+spec:
+  workspaces:
+    - name: maven-repo
+  params:
+    - name: GOALS
+      description: The Maven goals to run
+      type: array
+      default: ["package"]
+    - name: pathToDockerFile
+      type: string
+      description: The path to the dockerfile to build
+      default: $(resources.inputs.docker-source.path)/Dockerfile
+    - name: pathToContext
+      type: string
+      description: |
+        The build context used by Kaniko
+        (https://github.com/GoogleContainerTools/kaniko#kaniko-build-contexts)
+      default: $(resources.inputs.docker-source.path)
+  resources:
+    inputs:
+      - name: docker-source
+        type: git
+    outputs:
+      - name: builtImage
+        type: image
+  steps:
+    - name: git-build
+      image: gcr.io/cloud-builders/mvn
+      workingDir: $(params.pathToContext)
+      command: ["/usr/bin/mvn"]
+      args:
+        - -Dmaven.repo.local=$(workspaces.maven-repo.path)
+        - "$(params.GOALS)"
+    - name: build-and-push
+      image: gcr.io/kaniko-project/executor:v0.17.1
+      # specifying DOCKER_CONFIG is required to allow kaniko to detect docker credential
+      env:
+        - name: "DOCKER_CONFIG"
+          value: "/tekton/home/.docker/"
+      command:
+        - /kaniko/executor
+      args:
+        - --dockerfile=$(params.pathToDockerFile)
+        - --destination=$(resources.outputs.builtImage.url)
+        - --context=$(params.pathToContext)
+        - --skip-tls-verify
+---
+apiVersion: tekton.dev/v1beta1
+kind: ClusterTask
+metadata:
+  name: deploy-image-from-source
+spec:
+  workspaces:
+    - name: maven-repo
+  params:
+    - name: GOALS
+      description: The Maven goals to run
+      type: array
+      default: ["package"]
+    - name: pathToDockerFile
+      type: string
+      description: The path to the dockerfile to build
+      default: $(resources.inputs.docker-source.path)/Dockerfile
+    - name: pathToContext
+      type: string
+      description: |
+        The build context used by Kaniko
+        (https://github.com/GoogleContainerTools/kaniko#kaniko-build-contexts)
+      default: $(resources.inputs.docker-source.path)
+  resources:
+    inputs:
+      - name: docker-source
+        type: git
+      - name: autoloader-cluster
+        type: cluster
+  steps:
+    - name: deploy
+      image: lachlanevenson/k8s-kubectl
+      command: ["kubectl"]
+      args:
+        - "--kubeconfig"
+        - "/workspace/$(resources.inputs.autoloader-cluster.name)/kubeconfig" 
+        - "--context"
+        - "$(resources.inputs.autoloader-cluster.name)"
+        - "apply"
+        - "-f"
+        - "$(params.pathToContext)/service.yaml"
+---
+apiVersion: tekton.dev/v1beta1
+kind: ClusterTask
+metadata:
+  name: code-push
+spec:
+  workspaces:
+    - name: maven-repo
+  params:
+    - name: imageurl
+    - name: git-url
+    - name: git-revision
+      default: master
+    - name: pathToContext
+      type: string
+    - name: appname
+    - name: namespace
+      default: default
+    - name: source-dir
+      default: /source
+    - name: GIT_CONIG_URL_CREDENCIALS
+  resources:
+    inputs:
+      - name: docker-source
+        type: git
+  steps:
+    #- name: update-yaml
+    #  image: alpine
+    #  command: ["sed"]
+    #  args:
+    #    - "-i"
+    #    - "-e"
+    #    - "s;__IMAGE__;$(params.imageurl);g"
+    #    - "$(params.pathToContext)/service.yaml"
+    - name: update-yaml
+      image: dpet23/docker-alpine-git:enhanced
+      script: |
+        #!/usr/bin/env bash
+        sed -i -e 's;__IMAGE__;$(params.imageurl);g' $(params.pathToContext)/service.yaml
+        sed -i -e 's;__APP_NAME__;$(params.appname);g' $(params.pathToContext)/service.yaml
+        sed -i -e 's;__APP_NAME__;$(params.appname)-$(params.git-revision);g' $(params.pathToContext)/application.yaml
+        sed -i -e 's;__REPO_URL__;$(params.git-url);g' $(params.pathToContext)/application.yaml
+        sed -i -e 's;__RIVISION__;$(params.git-revision);g' $(params.pathToContext)/application.yaml
+        sed -i -e 's;__DEPLOYMENT_NAMESPACE__;$(params.namespace);g' $(params.pathToContext)/application.yaml
+    #- name: create-argo-application
+    #  image: lachlanevenson/k8s-kubectl
+    #  command: ["kubectl"]
+    #  args:
+    #    - "apply"
+    #    - "-f"
+    #    - "$(params.pathToContext)/application.yaml"
+    - name: git-clone
+      image: dpet23/docker-alpine-git:enhanced
+      env:
+        - name: GIT_EMAIL
+          valueFrom:
+            secretKeyRef: 
+              name: $(params.GIT_CONIG_URL_CREDENCIALS)
+              key: email
+              optional: true
+        - name: GIT_PASSWORD
+          valueFrom:
+            secretKeyRef: 
+              name: $(params.GIT_CONIG_URL_CREDENCIALS)
+              key: password
+              optional: true
+        - name: GIT_USERNAME
+          valueFrom:
+            secretKeyRef: 
+              name: $(params.GIT_CONIG_URL_CREDENCIALS)
+              key: username
+              optional: true
+      script: |
+        #!/usr/bin/env bash
+        set +x
+        echo "started cloning.."
+        git config --global user.email $GIT_EMAIL
+        git config --global user.name $GIT_USERNAME
+        GIT_USERNAME=`echo $GIT_USERNAME | sed 's/@/%40/g'`
+        GIT_PASSWORD=`echo $GIT_PASSWORD | sed 's/@/%40/g'`
+        echo $GIT_USERNAME
+        echo $GIT_PASSWORD
+        mkdir $(params.source-dir)
+        
+        if [[ -n "${GIT_USERNAME}" ]] && [[ -n "${GIT_PASSWORD}" ]]; then
+            git clone "https://${GIT_USERNAME}:${GIT_PASSWORD}@$(echo $(params.git-url) | awk -F 'https://' '{print $2}')" $(params.source-dir)
+        else
+            set -x
+            git clone $(params.git-url) $(params.source-dir)
+        fi
+        set -x
+        cp $(params.pathToContext)/*.yaml $(params.source-dir)/
+        cd $(params.source-dir)
+        git checkout $(params.git-revision)
+        git add .
+        git commit -am "image tag chages"
+        git push "https://${GIT_USERNAME}:${GIT_PASSWORD}@$(echo $(params.git-url) | awk -F 'https://' '{print $2}')" --all
+---
+apiVersion: tekton.dev/v1beta1
+kind: ClusterTask
+metadata:
+  name: sonarqube-scanner
+  labels:
+    app.kubernetes.io/version: "0.1"
+  annotations:
+    tekton.dev/pipelines.minVersion: "0.12.1"
+    tekton.dev/tags: security
+    tekton.dev/displayName: "sonarqube scanner"
+spec:
+  description: >-
+    The following task can be used to perform static analysis on the source code
+    provided the SonarQube server is hosted
+    SonarQube is the leading tool for continuously inspecting the Code Quality and Security
+    of your codebases, all while empowering development teams. Analyze over 25 popular
+    programming languages including C#, VB.Net, JavaScript, TypeScript and C++. It detects
+    bugs, vulnerabilities and code smells across project branches and pull requests.
+  workspaces:
+    - name: maven-repo
+  #workspaces:
+  #  - name: source-dir
+  #  - name: sonar-settings
+  params:
+    - name: GOALS
+      description: The Maven goals to run
+      type: array
+      default: ["package"]
+    - name: pathToContext
+      type: string
+    - name: SONAR_HOST_URL
+      description: Host URL where the sonarqube server is running
+      default: ""
+    - name: SONAR_PROJECT_KEY
+      description: Project's unique key
+      default: ""
+  resources:
+    inputs:
+      - name: docker-source
+        type: git
+  steps:
+    - name: git-build
+      image: gcr.io/cloud-builders/mvn
+      workingDir: $(params.pathToContext)
+      command: ["/usr/bin/mvn"]
+      args:
+        - -Dmaven.repo.local=$(workspaces.maven-repo.path)
+        - "$(params.GOALS)"
+    - name: sonar-properties-create
+      image: registry.access.redhat.com/ubi8/ubi-minimal:latest
+      workingDir: $(params.pathToContext)
+      script: |
+        #!/usr/bin/env bash
+        replaceValues() {
+          filename=$1
+          thekey=$2
+          newvalue=$3
+          if ! grep -R "^[#]*\s*${thekey}=.*" $filename >/dev/null; then
+            echo "APPENDING because '${thekey}' not found"
+            echo "" >>$filename
+            echo "$thekey=$newvalue" >>$filename
+          else
+            echo "SETTING because '${thekey}' found already"
+            sed -ir "s|^[#]*\s*${thekey}=.*|$thekey=$newvalue|" $filename
+          fi
+        }
+        if [[ -f $(params.pathToContext)/sonar-project.properties ]]; then
+          echo "using user provided sonar-project.properties file"
+          cp -R $(params.pathToContext)/sonar-project.properties $(params.pathToContext)/sonar-project.properties
+        fi
+        if [[ -f $(params.pathToContext)/sonar-project.properties ]]; then
+          if [[ -n "$(params.SONAR_HOST_URL)" ]]; then
+            replaceValues $(params.pathToContext)/sonar-project.properties sonar.host.url $(params.SONAR_HOST_URL)
+          fi
+          if [[ -n "$(params.SONAR_PROJECT_KEY)" ]]; then
+            replaceValues $(params.pathToContext)/sonar-project.properties sonar.projectKey $(params.SONAR_PROJECT_KEY)
+          fi
+        else
+          touch sonar-project.properties
+          echo "sonar.projectKey=$(params.SONAR_PROJECT_KEY)" >> sonar-project.properties
+          echo "sonar.host.url=$(params.SONAR_HOST_URL)" >> sonar-project.properties
+          echo "sonar.sources=src/main/" >> sonar-project.properties
+        fi
+        echo "sonar.java.source=1.8" >> $(params.pathToContext)/sonar-project.properties
+        echo "sonar.tests=src/test/" >> $(params.pathToContext)/sonar-project.properties
+        echo "sonar.sourceEncoding=UTF-8" >> $(params.pathToContext)/sonar-project.properties
+        echo "sonar.java.binaries=target/classes" >> $(params.pathToContext)/sonar-project.properties
+        echo "sonar.qualitygate.wait=true" >> $(params.pathToContext)/sonar-project.properties
+        echo "sonar.qualitygate.timeout=300" >> $(params.pathToContext)/sonar-project.properties
+        echo "---------------------------"
+        
+        cat $(params.pathToContext)/sonar-project.properties
+    - name: sonar-scan
+      image: sonarsource/sonar-scanner-cli
+      workingDir: $(params.pathToContext)
+      command:
+        - sonar-scanner

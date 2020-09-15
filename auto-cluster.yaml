@@ -1,0 +1,19 @@
+apiVersion: tekton.dev/v1alpha1
+kind: PipelineResource
+metadata:
+  name: __CLUSTER_RESOURCE_NAME__
+spec:
+  type: cluster
+  params:
+    - name: url
+      value: __CLUSTER_URL__
+    - name: username
+      value: __CLUSER_USERNAME__
+    - name: namespace
+      value: default
+    - name: insecure
+      value: 'false'
+    - name: cadata
+      value: __CDATA__
+    - name : token
+      value : __CLUSTER_TOKEN__

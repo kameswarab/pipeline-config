@@ -1,0 +1,83 @@
+apiVersion: triggers.tekton.dev/v1alpha1
+kind: TriggerTemplate
+metadata:
+  name: __TRIGGER_TEMPLATE_NAME__
+spec:
+  params:
+  - name: config-git-revision
+    description: The config repo git revision.
+  - name: config-git-url
+    description: The config repo git url.
+  - name: docker-image-push
+    description: Docker image to build.
+  - name: gitrepositoryurl
+    description: The repository url to build and deploy.
+  - name: gitrevision
+    description: The git revision
+    default: master
+  - name: SERVICE_ACCOUNT
+    description: The ServiceAccount under which to run the Pipeline.
+  - name: APPNAME
+    description: The ServiceAccount under which to run the Pipeline.
+  - name: docker-image-pull
+    description: The ServiceAccount under which to run the Pipeline.
+  - name: SONAR_HOST_URL
+    description: The ServiceAccount under which to run the Pipeline.
+  - name: cluster-resource-name
+    description: The ServiceAccount under which to run the Pipeline.
+  resourcetemplates:
+  - apiVersion: tekton.dev/v1beta1
+    kind: PipelineRun
+    metadata:
+      generateName: mvn-build-run-$(uid)
+    spec:
+      serviceAccountName: $(tt.params.SERVICE_ACCOUNT)
+      pipelineRef:
+        name: maven-build-push
+      resources:
+      - name: docker-source
+        resourceSpec:
+          type: git
+          params:
+          - name: revision
+            value: $(tt.params.gitrevision)
+          - name: url
+            value: $(tt.params.gitrepositoryurl)
+      - name: builtImage
+        resourceSpec:
+          type: image
+          params:
+          - name: url
+            value: $(tt.params.docker-image)
+      - name: autoloader-cluster
+        resourceRef:
+          name: $(tt.params.cluster-resource-name)
+      params:
+      - name: git-url
+        value: $(tt.params.config-git-url)
+      - name: git-revision
+        value: $(tt.params.config-git-revision)
+      - name: appname
+        value: $(tt.params.APPNAME)
+      - name: namespace
+        value: default
+      - name: imageurl
+        value: $(tt.params.docker-image-push)
+      - name: SERVICE_ACCOUNT
+        value: $(tt.params.SERVICE_ACCOUNT)
+      - name: REVISION
+        value: $(tt.params.REVISION)
+      - name: URL
+        value: $(tt.params.URL)
+      - name: pathToContext
+        value: /workspace/docker-source
+      - name: SONAR_HOST_URL
+        value: $(tt.params.SONAR_HOST_URL)
+      - name: imageurl
+        value: $(tt.params.docker-image-pull)
+      - name: pathToDockerFile
+        value: Dockerfile
+      workspaces:
+      - name: local-maven-repo
+        persistentVolumeClaim:
+          claimName: maven-repo-pvc
