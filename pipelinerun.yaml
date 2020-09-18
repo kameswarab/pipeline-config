@@ -24,7 +24,7 @@ spec:
     - name: imageurl
       value: __PULL_IMAGE_REPO_URL__/__APP_NAME__:__VERSION__
     - name: GIT_CONIG_URL_CREDENCIALS_SECRET
-      value: __GIT_CONIG_URL_CREDENCIALS_SECRET__  
+      value: __GIT_CONIG_URL_CREDENCIALS_SECRET__
   resources:
     - name: docker-source
       resourceSpec:
