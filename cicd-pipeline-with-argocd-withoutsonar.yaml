@@ -1,7 +1,7 @@
 apiVersion: tekton.dev/v1alpha1
 kind: Pipeline
 metadata:
-  name: cicd-pipeline-with-argocd-withsonar-__APP_NAME__
+  name: cicd-pipeline-with-argocd-withoutsonar-__APP_NAME__
 spec:
   workspaces:
   - name: local-maven-repo
