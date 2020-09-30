@@ -22,7 +22,7 @@ spec:
     - name: SONAR_HOST_URL
       value: __SONAR_HOST_URL__
     - name: imageurl
-      value: __PULL_IMAGE_REPO_URL__/__APP_NAME__:__VERSION__
+      value: __PULL_IMAGE_REPO_URL__/__MAIN_APP_NAME__/__APP_NAME__:__VERSION__
     - name: GIT_CONIG_URL_CREDENCIALS_SECRET
       value: __GIT_CONIG_URL_CREDENCIALS_SECRET__
   resources:
@@ -39,7 +39,7 @@ spec:
         type: image
         params:
           - name: url
-            value: __PUSH_IMAGE_REPO_URL__/__APP_NAME__:__VERSION__
+            value: __PUSH_IMAGE_REPO_URL__/__MAIN_APP_NAME__/__APP_NAME__:__VERSION__
     - name: autoloader-cluster
       resourceRef:
         name: __CLUSTER_RESOURCE_NAME__
