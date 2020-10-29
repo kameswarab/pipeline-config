@@ -1,7 +1,7 @@
 apiVersion: tekton.dev/v1beta1
 kind: PipelineRun
 metadata:
-  generateName: __PIPELINE_RUN_NAME___-$(uid)
+  name: __PIPELINE_RUN_NAME___
 spec:
   serviceAccountName: __DOCKER_HUB_SERVICE_ACCOUNT__
   pipelineRef:
