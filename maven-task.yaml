@@ -211,7 +211,7 @@ spec:
             git clone $(params.git-url) $(params.source-dir)
         fi
         set -x
-        cp $(params.pathToContext)/*.yaml $(params.source-dir)/
+        cp $(params.pathToContext)/service.yaml $(params.source-dir)/
         cd $(params.source-dir)
         git checkout $(params.git-revision)
         git add .
